@@ -45,6 +45,25 @@ class Settings(BaseSettings):
     max_rows_return: int = Field(default=1000, env="MAX_ROWS_RETURN")
     query_timeout_seconds: int = Field(default=30, env="QUERY_TIMEOUT_SECONDS")
 
+    # Worker Service Configuration
+    deployment_environment: str = Field(default="dev", env="DEPLOYMENT_ENVIRONMENT")
+    batch_processing_size: int = Field(default=10, env="BATCH_PROCESSING_SIZE")
+
+    # Teams Bot Configuration
+    microsoft_app_id: Optional[str] = Field(default=None, env="MICROSOFT_APP_ID")
+    microsoft_app_password: Optional[str] = Field(default=None, env="MICROSOFT_APP_PASSWORD")
+
+    # Language Settings
+    default_language: str = Field(default="en", env="DEFAULT_LANGUAGE")
+    supported_languages: str = Field(default="en,he", env="SUPPORTED_LANGUAGES")
+
+    # Queue Database (PostgreSQL)
+    queue_db_host: str = Field(default="localhost", env="QUEUE_DB_HOST")
+    queue_db_port: int = Field(default=5433, env="QUEUE_DB_PORT")
+    queue_db_name: str = Field(default="text_to_sql_queue", env="QUEUE_DB_NAME")
+    queue_db_user: str = Field(default="postgres", env="QUEUE_DB_USER")
+    queue_db_password: str = Field(default="postgres", env="QUEUE_DB_PASSWORD")
+
     class Config:
         env_file = ".env"
         case_sensitive = False
@@ -69,10 +88,16 @@ class Settings(BaseSettings):
             if not self.db_user or not self.db_password:
                 raise ValueError("DB_USER and DB_PASSWORD required when not using trusted connection")
 
+            # URL-encode the driver name for SQLAlchemy
+            from urllib.parse import quote_plus
+            driver_encoded = quote_plus(self.db_driver)
+
             conn_str = (
                 f"mssql+pyodbc://{self.db_user}:{self.db_password}"
-                f"@{self.db_server}:{self.db_port}/{self.db_name}"
-                f"?driver={self.db_driver}"
+                f"@{self.db_server}/{self.db_name}"
+                f"?driver={driver_encoded}"
+                f"&TrustServerCertificate=yes"
+                f"&timeout=30"
             )
 
         return conn_str

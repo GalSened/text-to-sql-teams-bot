@@ -16,16 +16,10 @@ class DatabaseManager:
     """Manages SQL Server database connections and operations."""
 
     def __init__(self):
-        """Initialize database manager with lazy connection."""
+        """Initialize database manager with connection pool."""
         self.engine: Optional[Engine] = None
         self.SessionLocal: Optional[sessionmaker] = None
-        self._initialized = False
-        self._connection_available = False
-
-    def _ensure_connection(self):
-        """Ensure database connection is initialized (lazy loading)."""
-        if not self._initialized:
-            self._init_engine()
+        self._init_engine()
 
     def _init_engine(self):
         """Initialize SQLAlchemy engine with connection pooling."""
@@ -48,21 +42,13 @@ class DatabaseManager:
             )
 
             # Test connection
-            try:
-                with self.engine.connect() as conn:
-                    result = conn.execute(text("SELECT 1 AS test"))
-                    logger.info("Database connection successful")
-                    self._connection_available = True
-            except Exception as conn_e:
-                logger.warning(f"Database connection test failed (will retry when needed): {conn_e}")
-                self._connection_available = False
-
-            self._initialized = True
+            with self.engine.connect() as conn:
+                result = conn.execute(text("SELECT 1 AS test"))
+                logger.info("Database connection successful")
 
         except Exception as e:
-            logger.error(f"Failed to initialize database engine: {e}")
-            self._initialized = True
-            self._connection_available = False
+            logger.error(f"Failed to initialize database connection: {e}")
+            raise
 
     @contextmanager
     def get_session(self):
@@ -73,9 +59,6 @@ class DatabaseManager:
             with db_manager.get_session() as session:
                 result = session.execute(text("SELECT * FROM users"))
         """
-        self._ensure_connection()
-        if not self._connection_available:
-            raise ConnectionError("Database connection is not available")
         session = self.SessionLocal()
         try:
             yield session
@@ -275,10 +258,6 @@ class DatabaseManager:
         Returns:
             Dictionary containing tables, columns, and relationships
         """
-        self._ensure_connection()
-        if not self._connection_available:
-            raise ConnectionError("Database connection is not available")
-
         try:
             inspector = inspect(self.engine)
 
@@ -333,10 +312,6 @@ class DatabaseManager:
 
     def test_connection(self) -> bool:
         """Test database connection."""
-        self._ensure_connection()
-        if not self._connection_available:
-            return False
-
         try:
             with self.engine.connect() as conn:
                 conn.execute(text("SELECT 1"))

@@ -19,6 +19,7 @@ from app.models.query_models import (
 )
 from app.core.query_executor import query_executor
 from app.core.database import db_manager
+from app.api.teams_endpoint import router as teams_router
 from loguru import logger
 
 # Configure logging
@@ -50,6 +51,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include Teams bot router
+app.include_router(teams_router)
 
 
 @app.on_event("startup")

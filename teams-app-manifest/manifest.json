@@ -1,0 +1,77 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "com.texttosql.bot",
+  "packageName": "com.texttosql.bot",
+  "developer": {
+    "name": "Your Company",
+    "websiteUrl": "https://yourcompany.com",
+    "privacyUrl": "https://yourcompany.com/privacy",
+    "termsOfUseUrl": "https://yourcompany.com/terms"
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "name": {
+    "short": "Text-to-SQL",
+    "full": "Text-to-SQL Database Query Bot"
+  },
+  "description": {
+    "short": "Query your database using natural language",
+    "full": "Ask database questions in plain English or Hebrew and get instant results. Supports safe query execution with multilingual responses."
+  },
+  "accentColor": "#0078D4",
+  "bots": [
+    {
+      "botId": "YOUR_BOT_ID_HERE",
+      "scopes": [
+        "personal",
+        "team",
+        "groupchat"
+      ],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "commandLists": [
+        {
+          "scopes": [
+            "personal",
+            "team",
+            "groupchat"
+          ],
+          "commands": [
+            {
+              "title": "help",
+              "description": "Show help and usage information"
+            },
+            {
+              "title": "status",
+              "description": "Check queue status"
+            },
+            {
+              "title": "history",
+              "description": "View your recent queries"
+            },
+            {
+              "title": "schema",
+              "description": "View available database tables"
+            },
+            {
+              "title": "examples",
+              "description": "See example questions"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "*.ngrok.io",
+    "*.ngrok-free.app"
+  ]
+}

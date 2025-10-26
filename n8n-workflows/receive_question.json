@@ -1,0 +1,162 @@
+{
+  "name": "Text-to-SQL: Receive Question",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nl-query",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook1",
+      "name": "Webhook - Receive Question",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Detect language (Hebrew vs English)\nconst question = $input.item.json.body.question;\nconst hebrewRegex = /[\\u0590-\\u05FF]/;\nconst language = hebrewRegex.test(question) ? 'he' : 'en';\n\n// Get environment from environment variable or default to devtest\nconst environment = $env.DEPLOYMENT_ENVIRONMENT || 'devtest';\n\n// Extract user info\nconst user_id = $input.item.json.body.user_id || 'anonymous';\n\nreturn {\n  question: question,\n  language: language,\n  environment: environment,\n  user_id: user_id\n};"
+      },
+      "id": "code1",
+      "name": "Detect Language & Environment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Get schema information from target database\nSELECT jsonb_build_object(\n  'tables', json_agg(\n    jsonb_build_object(\n      'name', table_name,\n      'schema', table_schema\n    )\n  )\n) as schema_info\nFROM information_schema.tables\nWHERE table_schema = 'public'\n  AND table_type = 'BASE TABLE';",
+        "options": {}
+      },
+      "id": "postgres1",
+      "name": "Get Schema Info",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [650, 300],
+      "credentials": {
+        "postgres": {
+          "id": "sql_queue_db",
+          "name": "SQL Queue Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "sql_queue"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "question": "={{ $('Detect Language & Environment').item.json.question }}",
+            "schema_info": "={{ $json.schema_info }}",
+            "environment": "={{ $('Detect Language & Environment').item.json.environment }}",
+            "language": "={{ $('Detect Language & Environment').item.json.language }}",
+            "user_id": "={{ $('Detect Language & Environment').item.json.user_id }}",
+            "status": "pending"
+          }
+        },
+        "options": {
+          "queryBatching": "independently"
+        }
+      },
+      "id": "postgres2",
+      "name": "Insert to Queue",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [850, 300],
+      "credentials": {
+        "postgres": {
+          "id": "sql_queue_db",
+          "name": "SQL Queue Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"job_id\": $json.job_id,\n  \"status\": \"pending\",\n  \"message\": $('Detect Language & Environment').item.json.language === 'he' \n    ? 'בקשתך התקבלה ומועברת לעיבוד' \n    : 'Your request has been received and is being processed',\n  \"estimated_wait_seconds\": 300,\n  \"status_url\": `http://localhost:5678/webhook/nl-status/${$json.job_id}`\n} }}",
+        "options": {}
+      },
+      "id": "respond1",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Receive Question": {
+      "main": [
+        [
+          {
+            "node": "Detect Language & Environment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Language & Environment": {
+      "main": [
+        [
+          {
+            "node": "Get Schema Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Schema Info": {
+      "main": [
+        [
+          {
+            "node": "Insert to Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert to Queue": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "text-to-sql-receive",
+  "meta": {
+    "instanceId": "your-instance-id"
+  },
+  "tags": [
+    {
+      "createdAt": "2025-01-23T00:00:00.000Z",
+      "updatedAt": "2025-01-23T00:00:00.000Z",
+      "id": "1",
+      "name": "text-to-sql"
+    }
+  ]
+}

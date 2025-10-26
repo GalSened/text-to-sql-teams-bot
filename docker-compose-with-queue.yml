@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  # PostgreSQL for SQL Queue
+  queue-db:
+    image: postgres:16-alpine
+    container_name: text-to-sql-queue-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: text_to_sql_queue
+    ports:
+      - "5432:5432"
+    volumes:
+      - queue-db-data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - text-to-sql-network
+
+  # Text-to-SQL Application
+  text-to-sql-app:
+    build: .
+    container_name: text-to-sql-app
+    depends_on:
+      queue-db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      # OpenAI
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+
+      # Queue Database (PostgreSQL)
+      - QUEUE_DB_TYPE=postgresql
+      - QUEUE_DB_HOST=queue-db
+      - QUEUE_DB_PORT=5432
+      - QUEUE_DB_NAME=text_to_sql_queue
+      - QUEUE_DB_USER=postgres
+      - QUEUE_DB_PASSWORD=postgres
+
+      # SQL Server Connection (Target DB)
+      - DB_DRIVER=${DB_DRIVER:-ODBC Driver 18 for SQL Server}
+      - DB_SERVER=${DB_SERVER}
+      - DB_PORT=${DB_PORT:-1433}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_TRUSTED_CONNECTION=${DB_TRUSTED_CONNECTION:-no}
+
+      # Environment Settings
+      - DEPLOYMENT_ENVIRONMENT=${DEPLOYMENT_ENVIRONMENT:-devtest}
+      - ALLOWED_QUERY_TYPES=${ALLOWED_QUERY_TYPES:-READ,WRITE_SAFE}
+
+      # Application
+      - APP_NAME=${APP_NAME:-Text-to-SQL Application}
+      - APP_VERSION=${APP_VERSION:-1.0.0}
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+      - DEBUG=${DEBUG:-false}
+
+      # Security
+      - SECRET_KEY=${SECRET_KEY}
+      - REQUIRE_CONFIRMATION_FOR_WRITES=${REQUIRE_CONFIRMATION_FOR_WRITES:-true}
+      - ENABLE_ADMIN_OPERATIONS=${ENABLE_ADMIN_OPERATIONS:-false}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FILE=/app/logs/app.log
+
+      # Query Limits
+      - MAX_ROWS_RETURN=${MAX_ROWS_RETURN:-1000}
+      - QUERY_TIMEOUT_SECONDS=${QUERY_TIMEOUT_SECONDS:-30}
+
+      # Language Support
+      - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE:-en}
+      - SUPPORTED_LANGUAGES=${SUPPORTED_LANGUAGES:-en,he}
+
+      # Claude Code Integration
+      - USE_CLAUDE_CODE=${USE_CLAUDE_CODE:-true}
+      - N8N_WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - N8N_STATUS_URL=${N8N_STATUS_URL}
+
+    volumes:
+      - ./logs:/app/logs
+
+    restart: unless-stopped
+
+    networks:
+      - text-to-sql-network
+
+volumes:
+  queue-db-data:
+    driver: local
+
+networks:
+  text-to-sql-network:
+    driver: bridge

@@ -1,0 +1,151 @@
+{
+  "name": "Text-to-SQL: Check Status",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "nl-status/:job_id",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook2",
+      "name": "Webhook - Check Status",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  job_id,\n  status,\n  question,\n  language,\n  environment,\n  sql_query,\n  query_type,\n  risk_level,\n  execution_allowed,\n  natural_language_response,\n  error_message,\n  error_type,\n  created_at,\n  sql_generated_at,\n  executed_at,\n  completed_at,\n  total_processing_time_ms,\n  EXTRACT(EPOCH FROM (COALESCE(completed_at, NOW()) - created_at)) as processing_time_seconds\nFROM sql_queue\nWHERE job_id = '{{ $json.params.job_id }}'::uuid;",
+        "options": {}
+      },
+      "id": "postgres3",
+      "name": "Get Status from DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [450, 300],
+      "credentials": {
+        "postgres": {
+          "id": "sql_queue_db",
+          "name": "SQL Queue Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if1",
+      "name": "Job Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"error\": \"Job not found\",\n  \"job_id\": $('Webhook - Check Status').item.json.params.job_id,\n  \"message\": \"No job found with this ID. It may have expired or been deleted.\"\n} }}",
+        "options": {
+          "responseCode": 404
+        }
+      },
+      "id": "respond2a",
+      "name": "Respond - Not Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"job_id\": $json.job_id,\n  \"status\": $json.status,\n  \"question\": $json.question,\n  \"language\": $json.language,\n  \"environment\": $json.environment,\n  \"answer\": $json.natural_language_response,\n  \"sql_executed\": $json.sql_query,\n  \"query_type\": $json.query_type,\n  \"risk_level\": $json.risk_level,\n  \"execution_allowed\": $json.execution_allowed,\n  \"error\": $json.error_message,\n  \"error_type\": $json.error_type,\n  \"timestamps\": {\n    \"created\": $json.created_at,\n    \"sql_generated\": $json.sql_generated_at,\n    \"executed\": $json.executed_at,\n    \"completed\": $json.completed_at\n  },\n  \"processing_time_seconds\": $json.processing_time_seconds,\n  \"total_processing_time_ms\": $json.total_processing_time_ms\n} }}",
+        "options": {}
+      },
+      "id": "respond2b",
+      "name": "Respond - Found",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 400]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Check Status": {
+      "main": [
+        [
+          {
+            "node": "Get Status from DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Status from DB": {
+      "main": [
+        [
+          {
+            "node": "Job Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job Found?": {
+      "main": [
+        [
+          {
+            "node": "Respond - Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond - Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "text-to-sql-status",
+  "meta": {
+    "instanceId": "your-instance-id"
+  },
+  "tags": [
+    {
+      "createdAt": "2025-01-23T00:00:00.000Z",
+      "updatedAt": "2025-01-23T00:00:00.000Z",
+      "id": "1",
+      "name": "text-to-sql"
+    }
+  ]
+}

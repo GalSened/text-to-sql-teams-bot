@@ -1,0 +1,145 @@
+{
+  "name": "Text-to-SQL: List Pending Queries",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "pending-queries",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook3",
+      "name": "Webhook - List Pending",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  job_id,\n  question,\n  schema_info,\n  environment,\n  language,\n  user_id,\n  created_at,\n  EXTRACT(EPOCH FROM (NOW() - created_at)) as age_seconds\nFROM sql_queue\nWHERE status = 'pending'\nORDER BY created_at ASC\nLIMIT 50;",
+        "options": {}
+      },
+      "id": "postgres4",
+      "name": "Get Pending from DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [450, 300],
+      "credentials": {
+        "postgres": {
+          "id": "sql_queue_db",
+          "name": "SQL Queue Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  environment,\n  status,\n  COUNT(*) as count\nFROM sql_queue\nWHERE created_at > NOW() - INTERVAL '24 hours'\nGROUP BY environment, status\nORDER BY environment, status;",
+        "options": {}
+      },
+      "id": "postgres5",
+      "name": "Get Queue Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [450, 450],
+      "credentials": {
+        "postgres": {
+          "id": "sql_queue_db",
+          "name": "SQL Queue Database"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge pending queries and stats\nconst pendingQueries = $input.item(0).json;\nconst stats = $input.item(1).json;\n\n// Calculate totals\nconst totalPending = pendingQueries.length;\nconst oldestAgeSeconds = totalPending > 0 ? pendingQueries[0].age_seconds : 0;\n\n// Group stats by environment\nconst statsByEnv = {};\nstats.forEach(s => {\n  if (!statsByEnv[s.environment]) {\n    statsByEnv[s.environment] = {};\n  }\n  statsByEnv[s.environment][s.status] = s.count;\n});\n\nreturn {\n  total_pending: totalPending,\n  oldest_age_seconds: oldestAgeSeconds,\n  oldest_age_minutes: Math.round(oldestAgeSeconds / 60 * 10) / 10,\n  requests: pendingQueries,\n  stats_24h: statsByEnv,\n  recommendation: totalPending > 20 \n    ? 'High queue load - consider batch processing' \n    : totalPending > 0 \n    ? 'Ready for processing' \n    : 'No pending requests'\n};"
+      },
+      "id": "code2",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond3",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - List Pending": {
+      "main": [
+        [
+          {
+            "node": "Get Pending from DB",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Queue Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pending from DB": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Queue Stats": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "text-to-sql-pending",
+  "meta": {
+    "instanceId": "your-instance-id"
+  },
+  "tags": [
+    {
+      "createdAt": "2025-01-23T00:00:00.000Z",
+      "updatedAt": "2025-01-23T00:00:00.000Z",
+      "id": "1",
+      "name": "text-to-sql"
+    }
+  ]
+}

@@ -11,8 +11,14 @@ import os
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    # OpenAI Configuration
-    openai_api_key: str = Field(..., env="OPENAI_API_KEY")
+    # AI Configuration - Local Claude CLI (no API keys needed!)
+    use_claude_cli: bool = Field(default=True, env="USE_CLAUDE_CLI")
+    claude_cli_command: str = Field(default="claude", env="CLAUDE_CLI_COMMAND")
+
+    # API keys (optional - only if not using Claude CLI)
+    anthropic_api_key: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
+    anthropic_model: str = Field(default="claude-sonnet-4-20250514", env="ANTHROPIC_MODEL")
+    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", env="OPENAI_MODEL")
 
     # SQL Server Configuration

@@ -86,6 +86,22 @@ class QueryHistory(BaseModel):
     user: Optional[str] = None
 
 
+class DirectSQLRequest(BaseModel):
+    """Request model for executing pre-generated SQL directly."""
+    sql: str = Field(..., description="Pre-generated SQL query to execute")
+    question: Optional[str] = Field(None, description="Original natural language question (for logging)")
+
+
+class DirectSQLResponse(BaseModel):
+    """Response model for direct SQL execution with simple answer."""
+    success: bool = Field(..., description="Whether execution was successful")
+    answer: str = Field(..., description="Simple text answer to the question")
+    sql_executed: str = Field(..., description="SQL query that was executed")
+    rows_affected: Optional[int] = Field(None, description="Number of rows affected/returned")
+    execution_time_ms: float = Field(..., description="Execution time in milliseconds")
+    error: Optional[str] = Field(None, description="Error message if execution failed")
+
+
 class SchemaInfo(BaseModel):
     """Database schema information."""
     tables: List[Dict[str, Any]] = Field(..., description="List of tables with columns")

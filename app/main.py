@@ -16,6 +16,8 @@ from app.models.query_models import (
     ExecutionResult,
     QueryHistory,
     SchemaInfo,
+    DirectSQLRequest,
+    DirectSQLResponse,
 )
 from app.core.query_executor import query_executor
 from app.core.database import db_manager
@@ -256,6 +258,74 @@ async def get_history(limit: int = 50):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve history: {str(e)}",
+        )
+
+
+@app.post("/query/execute-sql", response_model=DirectSQLResponse)
+async def execute_direct_sql(request: DirectSQLRequest):
+    """
+    Execute pre-generated SQL query directly and return simple answer.
+
+    This endpoint is designed for PowerShell orchestrator that calls Claude CLI
+    to generate SQL, then sends it here for safe execution.
+
+    Args:
+        request: DirectSQLRequest with SQL query
+
+    Returns:
+        DirectSQLResponse with simple text answer
+    """
+    import time
+
+    try:
+        logger.info(f"Executing direct SQL: {request.sql[:100]}...")
+
+        start_time = time.time()
+
+        # Execute query (db_manager handles both SELECT and DML safely)
+        results, rows_affected, exec_time_ms = db_manager.execute_query(request.sql)
+
+        # Format simple answer based on results
+        if results:
+            # For SELECT queries with results
+            if len(results) == 1 and len(results[0]) == 1:
+                # Single value result - return just the value
+                value = list(results[0].values())[0]
+                answer = str(value) if value is not None else "0"
+            else:
+                # Multiple rows/columns - provide count and first few results
+                answer = f"Found {len(results)} results"
+                if len(results) <= 5:
+                    # Show all results if 5 or fewer
+                    answer += ":\n" + "\n".join([str(dict(row)) for row in results[:5]])
+                else:
+                    # Show first 3 if more than 5
+                    answer += f" (showing first 3):\n" + "\n".join([str(dict(row)) for row in results[:3]])
+        elif rows_affected is not None and rows_affected > 0:
+            # For DML operations (INSERT/UPDATE/DELETE)
+            answer = f"{rows_affected} rows affected"
+        else:
+            # No results
+            answer = "No results found"
+
+        return DirectSQLResponse(
+            success=True,
+            answer=answer,
+            sql_executed=request.sql,
+            rows_affected=rows_affected or len(results) if results else 0,
+            execution_time_ms=exec_time_ms,
+            error=None,
+        )
+
+    except Exception as e:
+        logger.error(f"Direct SQL execution error: {e}")
+        return DirectSQLResponse(
+            success=False,
+            answer=f"Error: {str(e)}",
+            sql_executed=request.sql,
+            rows_affected=0,
+            execution_time_ms=0,
+            error=str(e),
         )
 
 

@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 
 from app.core.database import db_manager
-from app.core.openai_client import openai_client
+from app.services.sql_generator import IntelligentSQLGenerator
 from app.core.query_classifier import query_classifier
 from app.models.query_models import (
     QueryType,
@@ -28,6 +28,7 @@ class QueryExecutor:
         self.pending_queries: Dict[str, Dict[str, Any]] = {}
         self.query_history: List[QueryHistory] = []
         self.schema_cache: Optional[Dict[str, Any]] = None
+        self.sql_generator = IntelligentSQLGenerator()
 
     def get_schema(self) -> Dict[str, Any]:
         """Get database schema (cached)."""
@@ -61,15 +62,26 @@ class QueryExecutor:
             # Get schema
             schema = self.get_schema()
 
-            # Generate SQL using OpenAI
-            ai_result = openai_client.generate_sql(question, schema)
+            # Detect language (simple Hebrew detection)
+            language = 'he' if any(ord(char) >= 0x0590 and ord(char) <= 0x05FF for char in question) else 'en'
+            logger.info(f"Detected language: {language}")
+
+            # Generate SQL using pattern-based generator
+            ai_result = self.sql_generator.generate_sql(question, language=language, schema_info=schema)
+
+            # Check if generation was successful
+            if not ai_result.get("success", False):
+                error_msg = ai_result.get("error", "Could not generate SQL")
+                raise ValueError(error_msg)
 
             # Extract components
             sql = ai_result.get("sql", "")
-            query_type_str = ai_result.get("query_type", "READ")
-            risk_level_str = ai_result.get("risk_level", "low")
-            explanation = ai_result.get("explanation", "")
-            estimated_impact = ai_result.get("estimated_impact", "")
+
+            # Pattern-based generator doesn't provide these, so we'll classify them ourselves
+            query_type_str = "READ"  # Default, will be classified below
+            risk_level_str = "low"   # Default, will be classified below
+            explanation = f"Generated using {ai_result.get('method', 'pattern')} method (confidence: {ai_result.get('confidence', 0):.0%})"
+            estimated_impact = f"Pattern type: {ai_result.get('pattern_type', 'unknown')}"
 
             # Validate and classify
             query_type = QueryType(query_type_str)

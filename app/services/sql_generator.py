@@ -1,10 +1,11 @@
 """
-Intelligent SQL Generator - Pattern-based with AI-ready architecture
+Intelligent SQL Generator - Pattern-based with Claude CLI fallback
 Generates SQL queries from natural language questions
 """
 import re
 from typing import Dict, Any, Optional, List
 from loguru import logger
+from app.config import settings
 
 
 class IntelligentSQLGenerator:
@@ -20,7 +21,18 @@ class IntelligentSQLGenerator:
     def __init__(self):
         """Initialize SQL generator with patterns."""
         self.patterns = self._load_patterns()
-        self.use_ai_fallback = False  # Can enable later
+        self.use_ai_fallback = settings.use_claude_cli
+
+        # Import Claude CLI client if enabled
+        self.claude_cli_client = None
+        if self.use_ai_fallback:
+            try:
+                from app.core.claude_cli_client import claude_cli_client
+                self.claude_cli_client = claude_cli_client
+                logger.info("✓ Claude CLI fallback enabled for complex queries")
+            except Exception as e:
+                logger.warning(f"Claude CLI not available: {e}")
+                self.use_ai_fallback = False
 
     def _load_patterns(self) -> List[Dict]:
         """
@@ -233,14 +245,28 @@ class IntelligentSQLGenerator:
             pattern = self.detect_pattern(question)
 
             if not pattern:
-                logger.warning("No pattern matched, using fallback")
-                return {
-                    'success': False,
-                    'error': 'Could not understand the question. Please rephrase or ask something like: "How many customers joined last month?"',
-                    'sql': None,
-                    'confidence': 0,
-                    'method': 'no_match'
-                }
+                logger.warning("No pattern matched")
+                logger.warning(f"  use_ai_fallback={self.use_ai_fallback}, claude_cli_client={self.claude_cli_client}, schema_info={'present' if schema_info else 'missing'}")
+
+                # Try Claude CLI fallback for complex queries
+                if self.use_ai_fallback and self.claude_cli_client and schema_info:
+                    logger.info("→ Using Claude CLI for complex query...")
+                    return self.generate_with_ai(question, schema_info)
+                else:
+                    if not self.use_ai_fallback:
+                        logger.warning("  Claude CLI fallback is disabled (use_ai_fallback=False)")
+                    if not self.claude_cli_client:
+                        logger.warning("  Claude CLI client not available")
+                    if not schema_info:
+                        logger.warning("  Schema info not provided")
+
+                    return {
+                        'success': False,
+                        'error': 'Could not understand the question. Please rephrase or ask something like: "How many companies are in the system?"',
+                        'sql': None,
+                        'confidence': 0,
+                        'method': 'no_match'
+                    }
 
             logger.info(f"Matched pattern: {pattern['pattern_type']} (confidence: {pattern['confidence']})")
 
@@ -263,6 +289,19 @@ class IntelligentSQLGenerator:
 
             logger.success(f"Generated SQL: {sql}")
 
+            # ═══════════════════════════════════════════════════════════
+            # SECURITY: READ-ONLY MODE - Block non-SELECT queries
+            # ═══════════════════════════════════════════════════════════
+            if not self._is_read_only_query(sql):
+                logger.warning(f"SECURITY BLOCK: Non-SELECT query blocked: {sql}")
+                return {
+                    'success': False,
+                    'error': 'The bot only supports read queries (SELECT)\nהבוט תומך רק בשאילתות קריאה (SELECT)',
+                    'sql': None,
+                    'confidence': 0,
+                    'method': 'security_block'
+                }
+
             return {
                 'success': True,
                 'sql': sql,
@@ -284,23 +323,96 @@ class IntelligentSQLGenerator:
 
     def generate_with_ai(self, question: str, schema_info: Dict) -> Dict[str, Any]:
         """
-        Generate SQL using AI API (Claude or OpenAI).
+        Generate SQL using local Claude CLI for complex queries.
 
-        Future implementation - for complex queries that don't match patterns.
+        This is used as a fallback when pattern matching doesn't work.
+        No API keys needed - uses local Claude Code CLI.
         """
-        # TODO: Implement AI API integration
-        # 1. Format prompt with question + schema
-        # 2. Call Claude API or OpenAI API
-        # 3. Parse and validate SQL response
-        # 4. Return result
+        try:
+            if not self.claude_cli_client:
+                return {
+                    'success': False,
+                    'error': 'Claude CLI not available. Please ensure Claude Code is installed.',
+                    'sql': None,
+                    'confidence': 0,
+                    'method': 'ai_not_available'
+                }
 
-        return {
-            'success': False,
-            'error': 'AI generation not implemented yet',
-            'sql': None,
-            'confidence': 0,
-            'method': 'ai_not_available'
-        }
+            logger.info("Calling Claude CLI for complex query...")
+            result = self.claude_cli_client.generate_sql(question, schema_info)
+
+            # SECURITY: Check Claude CLI generated SQL is also read-only
+            sql = result.get('sql', '')
+            if not self._is_read_only_query(sql):
+                logger.warning(f"SECURITY BLOCK: Claude CLI generated non-SELECT query: {sql}")
+                return {
+                    'success': False,
+                    'error': 'The bot only supports read queries (SELECT)\nהבוט תומך רק בשאילתות קריאה (SELECT)',
+                    'sql': None,
+                    'confidence': 0,
+                    'method': 'security_block'
+                }
+
+            # Claude CLI returns: {sql, query_type, risk_level, explanation}
+            return {
+                'success': True,
+                'sql': sql,
+                'confidence': 0.85,  # AI-generated, high confidence
+                'method': 'claude_cli',
+                'pattern_type': 'AI_GENERATED',
+                'query_type': result.get('query_type', 'READ'),
+                'risk_level': result.get('risk_level', 'low'),
+                'explanation': result.get('explanation', '')
+            }
+
+        except Exception as e:
+            logger.error(f"Claude CLI error: {e}")
+            return {
+                'success': False,
+                'error': f'Claude CLI failed: {str(e)}',
+                'sql': None,
+                'confidence': 0,
+                'method': 'ai_error'
+            }
+
+    def _is_read_only_query(self, sql: str) -> bool:
+        """
+        Check if SQL query is read-only (SELECT only).
+
+        Returns True if query is SELECT, False for any write operation.
+        """
+        if not sql:
+            return False
+
+        # Remove leading/trailing whitespace
+        sql_clean = sql.strip().upper()
+
+        # Remove SQL comments
+        sql_clean = re.sub(r'--.*$', '', sql_clean, flags=re.MULTILINE)
+        sql_clean = re.sub(r'/\*.*?\*/', '', sql_clean, flags=re.DOTALL)
+
+        # Get first keyword
+        first_word = sql_clean.split()[0] if sql_clean.split() else ''
+
+        # Only allow SELECT and WITH (for CTEs that lead to SELECT)
+        allowed_keywords = ['SELECT', 'WITH']
+
+        if first_word not in allowed_keywords:
+            logger.warning(f"Non-SELECT query detected: starts with '{first_word}'")
+            return False
+
+        # Additional check: ensure no dangerous keywords anywhere
+        dangerous_keywords = [
+            'UPDATE', 'DELETE', 'INSERT', 'DROP', 'CREATE', 'ALTER',
+            'TRUNCATE', 'EXEC', 'EXECUTE', 'MERGE', 'GRANT', 'REVOKE'
+        ]
+
+        for keyword in dangerous_keywords:
+            if keyword in sql_clean:
+                logger.warning(f"Dangerous keyword '{keyword}' found in query")
+                return False
+
+        return True
 
 
 # Global instance

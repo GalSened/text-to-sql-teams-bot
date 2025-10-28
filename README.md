@@ -1,385 +1,904 @@
-# Text-to-SQL Application
+# Text-to-SQL Teams Bot
 
-AI-powered application that converts natural language questions into SQL queries for SQL Server databases, with comprehensive safety features for all CRUD operations.
+A production-ready Microsoft Teams bot that converts natural language questions to SQL queries and returns results directly in Teams chat. Features bilingual support (English/Hebrew), read-only security enforcement, and real-time query execution.
 
-[![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104-green.svg)](https://fastapi.tiangolo.com/)
-[![OpenAI](https://img.shields.io/badge/OpenAI-API-orange.svg)](https://openai.com/)
-[![SQL Server](https://img.shields.io/badge/SQL_Server-Supported-red.svg)](https://www.microsoft.com/sql-server)
-
-## ✨ Features
-
-- 🤖 **AI-Powered SQL Generation**: Convert natural language to T-SQL using OpenAI GPT models
-- 🛡️ **Multi-Layer Safety**: Query classification, risk assessment, and confirmation workflows
-- 🔍 **Full CRUD Support**: SELECT, INSERT, UPDATE, DELETE with appropriate safety checks
-- 👁️ **Preview Before Execute**: See affected rows before committing write operations
-- 📊 **Schema Introspection**: Automatic database schema discovery and caching
-- 🔄 **Transaction Support**: Transactional execution for data consistency
-- 📝 **Query History**: Track all executed queries with audit trail
-- 🚀 **REST API**: FastAPI-based endpoints for easy integration
-- 🐳 **Docker Ready**: Containerized deployment with docker-compose
-
-## 🏗️ Architecture
-
-```
-┌─────────────┐      ┌──────────────┐      ┌─────────────┐
-│   Client    │─────▶│  FastAPI API │─────▶│  OpenAI API │
-│ (Frontend)  │      │   Endpoints  │      │   (GPT-4)   │
-└─────────────┘      └──────────────┘      └─────────────┘
-                             │
-                    ┌────────┴────────┐
-                    ▼                 ▼
-            ┌───────────────┐  ┌─────────────┐
-            │    Query      │  │  Database   │
-            │  Classifier   │  │   Manager   │
-            └───────────────┘  └─────────────┘
-                    │                 │
-                    └────────┬────────┘
-                             ▼
-                    ┌─────────────────┐
-                    │   SQL Server    │
-                    │    Database     │
-                    └─────────────────┘
-```
-
-## 🔒 Safety Features
-
-### Query Classification
-
-Queries are automatically classified into four types:
-
-- **READ**: SELECT operations (low risk)
-- **WRITE_SAFE**: INSERT or targeted UPDATE/DELETE with WHERE clause (medium risk)
-- **WRITE_RISKY**: Bulk operations or operations without WHERE clause (high risk)
-- **ADMIN**: CREATE, DROP, ALTER operations (critical risk)
-
-### Confirmation Workflow
-
-1. **READ queries**: Can execute immediately (configurable)
-2. **WRITE_SAFE queries**: Require user confirmation
-3. **WRITE_RISKY queries**: Show preview of affected rows + require confirmation
-4. **ADMIN queries**: Disabled by default, require explicit configuration
-
-### Risk Assessment
-
-Each query receives a risk level:
-- **Low**: No data modification
-- **Medium**: Targeted single/multi-row operations
-- **High**: Bulk operations affecting many rows
-- **Critical**: Operations without WHERE clause or schema changes
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.12+
-- SQL Server (local, remote, or Azure SQL)
-- OpenAI API key
-- Docker (optional)
-
-### Installation
-
-1. **Clone the repository**:
-```bash
-git clone https://github.com/yourusername/text-to-sql-app.git
-cd text-to-sql-app
-```
-
-2. **Create virtual environment**:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. **Install dependencies**:
-```bash
-pip install -r requirements.txt
-```
-
-4. **Configure environment**:
-```bash
-cp .env.example .env
-# Edit .env with your settings
-```
-
-Required environment variables:
-```env
-# OpenAI
-OPENAI_API_KEY=your_openai_api_key_here
-
-# SQL Server
-DB_SERVER=your_server_name
-DB_NAME=your_database_name
-DB_USER=your_username
-DB_PASSWORD=your_password
-
-# Security
-SECRET_KEY=your_secret_key_here
-```
-
-5. **Run the application**:
-```bash
-python -m app.main
-# Or with uvicorn
-uvicorn app.main:app --reload
-```
-
-The API will be available at `http://localhost:8000`
-
-### Docker Deployment
-
-```bash
-# Build and run
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop
-docker-compose down
-```
-
-## 📖 API Usage
-
-### 1. Ask a Question
-
-Convert natural language to SQL:
-
-```bash
-curl -X POST "http://localhost:8000/query/ask" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "question": "Show me all customers from New York",
-    "execute_immediately": true
-  }'
-```
-
-Response:
-```json
-{
-  "query_id": "123e4567-e89b-12d3-a456-426614174000",
-  "sql": "SELECT * FROM customers WHERE city = 'New York'",
-  "query_type": "READ",
-  "risk_level": "low",
-  "explanation": "This query retrieves all customers located in New York",
-  "requires_confirmation": false,
-  "executed": true,
-  "results": [...],
-  "row_count": 42
-}
-```
-
-### 2. Preview Write Operations
-
-Before executing a write operation, preview affected rows:
-
-```bash
-curl -X GET "http://localhost:8000/query/preview/{query_id}"
-```
-
-Response:
-```json
-{
-  "query_id": "123e4567-e89b-12d3-a456-426614174000",
-  "affected_rows": 145,
-  "sample_data": [...],
-  "warnings": ["Large operation: 145 rows will be affected"]
-}
-```
-
-### 3. Execute with Confirmation
-
-Execute a pending query:
-
-```bash
-curl -X POST "http://localhost:8000/query/execute" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query_id": "123e4567-e89b-12d3-a456-426614174000",
-    "confirmed": true
-  }'
-```
-
-### 4. Get Schema Information
-
-```bash
-curl -X GET "http://localhost:8000/schema"
-```
-
-### 5. View Query History
-
-```bash
-curl -X GET "http://localhost:8000/query/history?limit=50"
-```
-
-## 📚 API Documentation
-
-Interactive API documentation is available at:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-
-## 🔧 Configuration
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | OpenAI API key | Required |
-| `OPENAI_MODEL` | OpenAI model to use | gpt-4o-mini |
-| `DB_SERVER` | SQL Server hostname/IP | Required |
-| `DB_PORT` | SQL Server port | 1433 |
-| `DB_NAME` | Database name | Required |
-| `DB_USER` | Database username | Required |
-| `DB_PASSWORD` | Database password | Required |
-| `REQUIRE_CONFIRMATION_FOR_WRITES` | Require confirmation for write operations | true |
-| `ENABLE_ADMIN_OPERATIONS` | Enable CREATE/DROP/ALTER operations | false |
-| `MAX_ROWS_RETURN` | Maximum rows to return | 1000 |
-| `QUERY_TIMEOUT_SECONDS` | Query execution timeout | 30 |
-
-### Security Settings
-
-**Production Recommendations**:
-- Set `REQUIRE_CONFIRMATION_FOR_WRITES=true`
-- Keep `ENABLE_ADMIN_OPERATIONS=false` unless absolutely necessary
-- Use strong `SECRET_KEY` (generate with `openssl rand -hex 32`)
-- Configure CORS appropriately in `app/main.py`
-- Use SQL Server authentication with least-privilege accounts
-- Enable SSL/TLS for database connections
-
-## 🧪 Example Use Cases
-
-### 1. Data Exploration
-```
-Question: "How many orders were placed last month?"
-SQL: SELECT COUNT(*) FROM orders WHERE order_date >= DATEADD(month, -1, GETDATE())
-```
-
-### 2. Data Updates
-```
-Question: "Update the email for customer with ID 12345"
-SQL: UPDATE customers SET email = 'new@email.com' WHERE customer_id = 12345
-Preview: Shows current customer data
-Confirmation: Required
-```
-
-### 3. Complex Queries
-```
-Question: "Show top 10 customers by total purchase amount"
-SQL: SELECT TOP 10 c.customer_id, c.name, SUM(o.total_amount) as total_spent
-     FROM customers c
-     JOIN orders o ON c.customer_id = o.customer_id
-     GROUP BY c.customer_id, c.name
-     ORDER BY total_spent DESC
-```
-
-## 🛠️ Development
-
-### Project Structure
-
-```
-text-to-sql-app/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                 # FastAPI application
-│   ├── config.py               # Configuration management
-│   ├── core/
-│   │   ├── database.py         # Database connection & execution
-│   │   ├── openai_client.py    # OpenAI integration
-│   │   ├── query_classifier.py # Query classification & validation
-│   │   └── query_executor.py   # Query execution workflow
-│   ├── models/
-│   │   └── query_models.py     # Pydantic models
-│   └── utils/
-├── tests/                       # Test suite
-├── docs/                        # Additional documentation
-├── .env.example                 # Example environment configuration
-├── requirements.txt             # Python dependencies
-├── Dockerfile                   # Docker image definition
-├── docker-compose.yml          # Docker compose configuration
-└── README.md                    # This file
-```
-
-### Running Tests
-
-```bash
-pytest tests/ -v
-```
-
-### Code Quality
-
-```bash
-# Format code
-black app/
-
-# Lint
-flake8 app/
-
-# Type checking
-mypy app/
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## ⚠️ Security Considerations
-
-- **Never expose this API directly to the internet without authentication**
-- Use strong database credentials with minimal required permissions
-- Regularly rotate API keys and secrets
-- Review query logs for suspicious activity
-- Test thoroughly in development before production use
-- Consider rate limiting for production deployments
-
-## 🐛 Troubleshooting
-
-### Database Connection Issues
-
-1. **ODBC Driver not found**:
-   ```bash
-   # Install ODBC Driver 18 for SQL Server
-   # Windows: Download from Microsoft
-   # Linux: Follow installation steps in Dockerfile
-   ```
-
-2. **Authentication failed**:
-   - Verify credentials in `.env`
-   - Check SQL Server allows remote connections
-   - Verify firewall rules allow port 1433
-
-3. **SSL/TLS errors**:
-   - Add `TrustServerCertificate=yes` to connection string
-   - Or configure proper SSL certificates
-
-### OpenAI API Issues
-
-1. **Rate limits**:
-   - Use lower-tier models for development
-   - Implement request throttling
-   - Consider caching common queries
-
-2. **Invalid API key**:
-   - Verify key in `.env`
-   - Check key has not expired
-   - Ensure sufficient credits
-
-## 📧 Support
-
-For issues, questions, or contributions, please open an issue on GitHub.
-
-## 🙏 Acknowledgments
-
-- [FastAPI](https://fastapi.tiangolo.com/) for the excellent web framework
-- [OpenAI](https://openai.com/) for the GPT models
-- [SQLAlchemy](https://www.sqlalchemy.org/) for database abstraction
-- Inspired by the [KDNuggets tutorial](https://www.kdnuggets.com/creating-a-text-to-sql-app-with-openai-fastapi-sqlite)
+![Bot Demo](https://img.shields.io/badge/Status-Production%20Ready-brightgreen)
+![Security](https://img.shields.io/badge/Security-Read--Only%20Mode-blue)
+![Languages](https://img.shields.io/badge/Languages-English%20%7C%20Hebrew-orange)
 
 ---
 
-**Built with ❤️ for data teams who want to query databases in plain English**
+## 📋 Table of Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [Security](#security)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [API Reference](#api-reference)
+- [PowerShell Bot Scripts](#powershell-bot-scripts)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+- [Production Deployment](#production-deployment)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## ✨ Features
+
+### Core Functionality
+- **Natural Language to SQL**: Converts questions in English or Hebrew to SQL queries
+- **Direct Teams Integration**: Responds to questions in Microsoft Teams chat
+- **Real-time Execution**: Executes queries and returns formatted results instantly
+- **Bilingual Support**: Full support for English and Hebrew questions and responses
+- **Smart Query Generation**: Uses pattern matching with Claude CLI fallback for complex queries
+
+### Security Features
+- **Read-Only Enforcement**: Double-layer security blocks all write operations (UPDATE, DELETE, INSERT, DROP, etc.)
+- **API-Level Protection**: Primary security layer in FastAPI service
+- **Bot-Level Failsafe**: Secondary regex validation before execution
+- **Bilingual Error Messages**: Clear security messages in both English and Hebrew
+- **Audit Logging**: All queries and security blocks are logged
+
+### User Experience
+- **Question Detection**: Only processes messages ending with `?`
+- **Reaction Feedback**: Adds 👀 reaction when processing (indicates bot is working)
+- **Clean Results**: Returns only query results, not SQL code
+- **Formatted Output**: Tables and single values formatted for readability
+- **Error Handling**: User-friendly error messages for common issues
+
+---
+
+## 🏗️ Architecture
+
+### System Components
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Microsoft Teams                           │
+│                  "ask the DB" Chat                           │
+└──────────────────┬──────────────────────────────────────────┘
+                   │
+                   │ Microsoft Graph API
+                   │
+┌──────────────────▼──────────────────────────────────────────┐
+│              PowerShell Bot (sql-bot-v2.ps1)                 │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ • Polls Teams chat every 5 seconds                     │ │
+│  │ • Detects questions (messages ending with ?)           │ │
+│  │ • Adds 👀 reaction                                      │ │
+│  │ • Calls FastAPI service                                │ │
+│  │ • Security check (regex failsafe)                      │ │
+│  │ • Executes SQL via ADO.NET                             │ │
+│  │ • Sends formatted results to Teams                     │ │
+│  └────────────────────────────────────────────────────────┘ │
+└──────────────────┬──────────────────────────────────────────┘
+                   │
+                   │ HTTP POST /query/ask
+                   │
+┌──────────────────▼──────────────────────────────────────────┐
+│              FastAPI Service (localhost:8000)                │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ SQL Generator Service                                  │ │
+│  │ ├─ Pattern Matching (Primary)                          │ │
+│  │ │  └─ Keyword-based SQL generation                     │ │
+│  │ │                                                       │ │
+│  │ ├─ Claude CLI (Fallback)                               │ │
+│  │ │  └─ AI-powered complex query generation              │ │
+│  │ │                                                       │ │
+│  │ └─ Security Layer (Read-Only Validation)               │ │
+│  │    └─ Blocks: UPDATE, DELETE, INSERT, DROP, etc.       │ │
+│  └────────────────────────────────────────────────────────┘ │
+└──────────────────┬──────────────────────────────────────────┘
+                   │
+                   │ ADO.NET Connection
+                   │
+┌──────────────────▼──────────────────────────────────────────┐
+│              SQL Server Database                             │
+│                   (WeSign)                                   │
+│          DEVTEST\SQLEXPRESS                                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Technology Stack
+
+**Backend Services:**
+- FastAPI 0.104.1 (Python 3.12)
+- Pydantic for data validation
+- Claude CLI for complex query generation
+- Pattern matching for simple queries
+
+**Bot Runtime:**
+- PowerShell 5.1+
+- Microsoft Graph API
+- ADO.NET (System.Data.SqlClient)
+
+**Database:**
+- SQL Server (DEVTEST\SQLEXPRESS)
+- Database: WeSign
+
+**Infrastructure:**
+- Docker (PostgreSQL queue - optional for background worker)
+- Windows Server / Windows 10+
+
+---
+
+## 🔒 Security
+
+### Multi-Layer Protection
+
+#### Layer 1: API Security (Primary)
+**Location:** `app/services/sql_generator.py`
+
+```python
+def _is_read_only_query(self, sql: str) -> bool:
+    """Validates SQL is read-only (SELECT only)"""
+    # Removes comments
+    # Checks first keyword is SELECT or WITH
+    # Scans for dangerous keywords
+    # Returns: True if safe, False if dangerous
+```
+
+**Blocked Operations:**
+- UPDATE
+- DELETE
+- INSERT
+- DROP
+- CREATE
+- ALTER
+- TRUNCATE
+- EXEC/EXECUTE
+- MERGE
+- GRANT/REVOKE
+
+**Response on Block:**
+```json
+{
+  "error": "The bot only supports read queries (SELECT)\nהבוט תומך רק בשאילתות קריאה (SELECT)"
+}
+```
+
+#### Layer 2: Bot Security (Failsafe)
+**Location:** `sql-bot-v2.ps1` (line 248)
+
+```powershell
+if ($sql -match '^\s*(UPDATE|DELETE|INSERT|DROP|...)') {
+    # Show bilingual security message
+    # Log security block
+    # Skip query execution
+}
+```
+
+### Bilingual Security Messages
+
+When dangerous query is detected:
+
+```
+🚫 **Security Policy**
+
+The bot only supports read queries (SELECT)
+הבוט תומך רק בשאילתות קריאה (SELECT)
+
+For data modifications, please contact your administrator.
+```
+
+### Audit Trail
+
+All security events are logged:
+```
+2025-10-27 09:33:32 | ERROR | Error calling SQL API: {"detail":"The bot only supports read queries..."}
+2025-10-27 09:33:32 | INFO | Error message sent: 1761550412780
+```
+
+**Log Location:** `state/sql_bot_v2.log`
+
+---
+
+## 📦 Prerequisites
+
+### Required Software
+
+1. **Python 3.12+**
+   ```bash
+   python --version  # Should show 3.12 or higher
+   ```
+
+2. **PowerShell 5.1+**
+   ```powershell
+   $PSVersionTable.PSVersion  # Should show 5.1 or higher
+   ```
+
+3. **SQL Server**
+   - SQL Server Express or higher
+   - TCP/IP enabled
+   - Mixed mode authentication
+
+4. **Microsoft Teams**
+   - Valid Microsoft 365 account
+   - Teams desktop or web app
+
+5. **Claude CLI** (for complex queries)
+   ```bash
+   claude --version
+   ```
+   Install from: https://github.com/anthropics/anthropic-tools
+
+6. **Git** (for cloning repository)
+   ```bash
+   git --version
+   ```
+
+### Optional
+- **Docker Desktop** (for PostgreSQL queue - background worker only)
+- **ngrok** (for Teams webhook endpoint - production deployment)
+
+---
+
+## 🚀 Installation
+
+### Step 1: Clone Repository
+
+```bash
+git clone https://github.com/GalSened/text-to-sql-teams-bot.git
+cd text-to-sql-teams-bot
+```
+
+### Step 2: Install Python Dependencies
+
+```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# Windows:
+.\venv\Scripts\activate
+# Linux/Mac:
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### Step 3: Configure Environment Variables
+
+Create `.env` file in the project root:
+
+```env
+# Database Configuration
+DB_SERVER=DEVTEST\SQLEXPRESS
+DB_NAME=WeSign
+DB_USER=sa
+DB_PASSWORD=YourSecurePassword
+
+# Microsoft Teams (for PowerShell bot)
+TEAMS_TENANT_ID=your-tenant-id
+TEAMS_CLIENT_ID=your-client-id
+TEAMS_CLIENT_SECRET=your-client-secret
+
+# Chat Configuration
+TEAMS_CHAT_ID=19:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx@thread.v2
+
+# Claude CLI Settings (optional)
+CLAUDE_API_KEY=sk-ant-xxxxx
+```
+
+### Step 4: Set Up Microsoft Graph Authentication
+
+Run the authentication helper:
+```powershell
+. .\graph-api-helpers.ps1
+Get-GraphToken
+```
+
+This will:
+- Prompt for device code authentication
+- Save refresh token to `.msgraph-auth-with-refresh.json`
+- Token auto-refreshes on expiry
+
+### Step 5: Find Your Teams Chat ID
+
+```powershell
+.\list-teams-chats.ps1
+```
+
+Copy the Chat ID for "ask the DB" chat and update `.env`:
+```env
+TEAMS_CHAT_ID=19:9aa2d304ade8465baadcd9051e0a5cfc@thread.v2
+```
+
+---
+
+## ⚙️ Configuration
+
+### Database Connection
+
+Edit `.env` file:
+```env
+DB_SERVER=YOUR_SERVER\INSTANCE
+DB_NAME=YOUR_DATABASE
+DB_USER=YOUR_USERNAME
+DB_PASSWORD=YOUR_PASSWORD
+```
+
+### Bot Polling Interval
+
+Edit `sql-bot-v2.ps1`:
+```powershell
+$POLL_INTERVAL = 5  # Seconds between checks (default: 5)
+```
+
+### Chat ID
+
+Update `sql-bot-v2.ps1`:
+```powershell
+$CHAT_ID = "19:YOUR_CHAT_ID@thread.v2"
+```
+
+---
+
+## 📖 Usage
+
+### Start All Services
+
+```powershell
+.\start-all-services.ps1
+```
+
+This starts:
+1. **FastAPI Server** (port 8000)
+2. **Background Worker** (PostgreSQL queue processor)
+3. Opens browser to API docs: http://localhost:8000/docs
+
+### Start SQL Bot
+
+```powershell
+.\start-sql-bot-v2.ps1
+```
+
+**Console Output:**
+```
+╔════════════════════════════════════════════════════════════════╗
+║          🤖 SQL BOT V2 - TEAMS ORCHESTRATOR                    ║
+║                                                                ║
+║  Chat: ask the DB                                              ║
+║  Trigger: Messages ending with ?                               ║
+║  Response: Query results only (not SQL)                        ║
+╚════════════════════════════════════════════════════════════════╝
+
+[INFO] SQL Bot V2 starting...
+[INFO] Monitoring chat: ask the DB (ID: 19:9aa2...)
+```
+
+### Ask Questions in Teams
+
+Open Teams → "ask the DB" chat → Type questions:
+
+**Examples:**
+
+```
+How many companies are in the system?
+```
+**Bot Response:**
+```
+**Result:** 312
+```
+
+---
+
+```
+List the top 5 companies?
+```
+**Bot Response:**
+```
+**Results:**
+Id | Name | Status
+--- | --- | ---
+1 | Company A | Active
+2 | Company B | Active
+...
+```
+
+---
+
+```
+כמה חברות יש במערכת?
+```
+**Bot Response:**
+```
+**Result:** 312
+```
+
+### Stop Services
+
+**Stop SQL Bot:**
+```powershell
+.\stop-sql-bot-v2.ps1
+```
+
+**Stop All Services:**
+```powershell
+.\stop-all-services.ps1
+```
+
+**Restart SQL Bot:**
+```powershell
+.\restart-sql-bot-v2.ps1
+```
+
+---
+
+## 🔌 API Reference
+
+### Base URL
+```
+http://localhost:8000
+```
+
+### Endpoints
+
+#### `POST /query/ask`
+Convert natural language question to SQL and execute.
+
+**Request:**
+```json
+{
+  "question": "How many companies are there?"
+}
+```
+
+**Response (Success):**
+```json
+{
+  "success": true,
+  "sql": "SELECT COUNT(*) as count FROM Companies",
+  "results": [...],
+  "explanation": "pattern_matching",
+  "confidence": 0.95
+}
+```
+
+**Response (Security Block):**
+```json
+{
+  "success": false,
+  "error": "The bot only supports read queries (SELECT)\nהבוט תומך רק בשאילתות קריאה (SELECT)",
+  "sql": null,
+  "confidence": 0,
+  "method": "security_block"
+}
+```
+
+#### `GET /health`
+Health check endpoint.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-10-27T10:30:00Z"
+}
+```
+
+#### `GET /docs`
+Interactive API documentation (Swagger UI).
+
+Open in browser: http://localhost:8000/docs
+
+---
+
+## 🤖 PowerShell Bot Scripts
+
+### Core Scripts
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `sql-bot-v2.ps1` | Main bot logic | Run with `start-sql-bot-v2.ps1` |
+| `start-sql-bot-v2.ps1` | Start bot in new window | `.\start-sql-bot-v2.ps1` |
+| `stop-sql-bot-v2.ps1` | Stop running bot | `.\stop-sql-bot-v2.ps1` |
+| `restart-sql-bot-v2.ps1` | Restart bot | `.\restart-sql-bot-v2.ps1` |
+| `graph-api-helpers.ps1` | Microsoft Graph API functions | Sourced by other scripts |
+
+### Utility Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `list-teams-chats.ps1` | List all Teams chats to find Chat ID |
+| `send-test-message.ps1` | Send test message to chat |
+| `check-recent-messages.ps1` | View recent chat messages |
+| `comprehensive-security-test.ps1` | Run security test suite |
+| `cleanup-old-files.ps1` | Remove deprecated scripts |
+
+### Bot State Files
+
+| File | Purpose | Location |
+|------|---------|----------|
+| `sql_bot_v2.lock` | Process lock (prevents duplicate instances) | `state/` |
+| `sql_bot_v2.log` | Bot activity log | `state/` |
+| `sql_bot_v2_last_msg.txt` | Last processed message ID | `state/` |
+| `sql_bot_v2_sent.json` | Sent message tracking (prevents loops) | `state/` |
+
+---
+
+## 🧪 Testing
+
+### Run Comprehensive Tests
+
+```powershell
+.\comprehensive-security-test.ps1
+```
+
+**Test Coverage:**
+- ✅ SELECT queries (English)
+- ✅ SELECT queries (Hebrew)
+- ✅ DELETE attempts (blocked)
+- ✅ UPDATE attempts (blocked)
+- ✅ INSERT attempts (blocked)
+- ✅ DROP attempts (blocked)
+- ✅ Complex SELECT with JOINs
+- ✅ Bilingual error messages
+
+**Expected Output:**
+```
+╔════════════════════════════════════════════════════════════════╗
+║              COMPREHENSIVE SECURITY TEST                       ║
+╚════════════════════════════════════════════════════════════════╝
+
+Test 1: SELECT COUNT (English)
+✅ PASS: Query allowed and returned results
+
+Test 2: SELECT COUNT (Hebrew)
+✅ PASS: Query allowed and returned results
+
+Test 3: DELETE with WHERE
+✅ PASS: Security block message shown
+
+...
+
+Overall: 7/7 Tests PASSED
+```
+
+### Test Individual Queries
+
+```powershell
+# Test pattern matching
+python test_comprehensive.py
+
+# Test Hebrew support
+python test_hebrew_direct.py
+
+# Test Claude CLI
+python test_claude_simple.py
+```
+
+### Verify Security
+
+```powershell
+.\test-security-enforcement.ps1
+```
+
+Attempts dangerous queries and verifies they're blocked.
+
+---
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+#### Issue: Bot Not Responding
+
+**Symptoms:** Messages in Teams, no bot response
+
+**Solutions:**
+1. Check bot is running:
+   ```powershell
+   Get-Process powershell | Where-Object { $_.MainWindowTitle -match "SQL Bot" }
+   ```
+
+2. Check log for errors:
+   ```powershell
+   Get-Content state\sql_bot_v2.log -Tail 20
+   ```
+
+3. Verify chat ID is correct:
+   ```powershell
+   .\list-teams-chats.ps1
+   ```
+
+4. Restart bot:
+   ```powershell
+   .\restart-sql-bot-v2.ps1
+   ```
+
+---
+
+#### Issue: Authentication Expired
+
+**Symptoms:** `401 Unauthorized` errors in log
+
+**Solutions:**
+1. Re-authenticate:
+   ```powershell
+   . .\graph-api-helpers.ps1
+   Get-GraphToken
+   ```
+
+2. Verify token file exists:
+   ```powershell
+   Test-Path .msgraph-auth-with-refresh.json
+   ```
+
+---
+
+#### Issue: SQL Connection Failed
+
+**Symptoms:** `Cannot connect to database` errors
+
+**Solutions:**
+1. Verify SQL Server is running:
+   ```powershell
+   Get-Service MSSQL*
+   ```
+
+2. Test connection string:
+   ```powershell
+   sqlcmd -S DEVTEST\SQLEXPRESS -U sa -P YourPassword -Q "SELECT @@VERSION"
+   ```
+
+3. Check firewall allows SQL Server port (1433)
+
+4. Enable TCP/IP in SQL Server Configuration Manager
+
+---
+
+#### Issue: FastAPI Service Not Starting
+
+**Symptoms:** `Connection refused` to localhost:8000
+
+**Solutions:**
+1. Check if port 8000 is in use:
+   ```powershell
+   netstat -ano | findstr :8000
+   ```
+
+2. Start service manually:
+   ```bash
+   cd app
+   uvicorn main:app --reload --host 0.0.0.0 --port 8000
+   ```
+
+3. Check Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+---
+
+#### Issue: Reactions Not Appearing
+
+**Symptoms:** No 👀 reaction when bot processes questions
+
+**Solutions:**
+1. Check bot has permissions in Teams chat
+2. Verify `Add-MessageReaction` function works:
+   ```powershell
+   .\test-reaction.ps1
+   ```
+3. Check log for reaction errors:
+   ```powershell
+   Get-Content state\sql_bot_v2.log | Select-String "Reaction"
+   ```
+
+---
+
+### Debug Mode
+
+Enable verbose logging in `sql-bot-v2.ps1`:
+
+```powershell
+# Change this line:
+$VerbosePreference = "Continue"
+
+# Add before running query:
+Write-Verbose "About to execute SQL: $sql"
+```
+
+---
+
+## 🌐 Production Deployment
+
+### Architecture Overview
+
+```
+Internet
+  │
+  ├─ ngrok Tunnel (HTTPS)
+  │   └─ https://your-subdomain.ngrok.io
+  │
+  ├─ Azure Bot Service
+  │   └─ Messaging Endpoint: https://your-subdomain.ngrok.io/api/messages
+  │
+  └─ Microsoft Teams
+      │
+      ├─ "ask the DB" Chat
+      │   └─ Users send questions
+      │
+      └─ Bot Responses
+```
+
+### Deployment Steps
+
+#### 1. Set Up ngrok
+
+```bash
+# Install ngrok
+choco install ngrok
+
+# Start tunnel
+ngrok http 8000
+```
+
+**Copy HTTPS URL:** `https://abc123.ngrok.io`
+
+#### 2. Configure Azure Bot
+
+1. Go to Azure Portal → Bot Services
+2. Create new "Azure Bot"
+3. Set **Messaging Endpoint:**
+   ```
+   https://abc123.ngrok.io/api/messages
+   ```
+4. Copy **App ID** and **App Secret**
+
+#### 3. Update Configuration
+
+Add to `.env`:
+```env
+AZURE_BOT_APP_ID=your-app-id
+AZURE_BOT_APP_SECRET=your-app-secret
+NGROK_URL=https://abc123.ngrok.io
+```
+
+#### 4. Deploy to Windows Server
+
+```powershell
+# Install as Windows Service
+New-Service -Name "SQLBotV2" `
+            -BinaryPathName "powershell.exe -ExecutionPolicy Bypass -File C:\bots\sql-bot-v2.ps1" `
+            -StartupType Automatic `
+            -DisplayName "SQL Teams Bot V2"
+
+# Start service
+Start-Service SQLBotV2
+```
+
+#### 5. Set Up Process Monitoring
+
+Use Task Scheduler to restart bot on failure:
+
+```powershell
+# Create scheduled task
+$action = New-ScheduledTaskAction -Execute "powershell.exe" `
+    -Argument "-ExecutionPolicy Bypass -File C:\bots\restart-sql-bot-v2.ps1"
+
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)
+
+Register-ScheduledTask -TaskName "Monitor SQL Bot" -Action $action -Trigger $trigger
+```
+
+### Production Checklist
+
+- [ ] ngrok tunnel configured and running
+- [ ] Azure Bot messaging endpoint updated
+- [ ] Environment variables set in production
+- [ ] SQL Server firewall rules configured
+- [ ] Bot installed as Windows Service
+- [ ] Process monitoring enabled
+- [ ] Log rotation configured
+- [ ] Backup/restore procedures documented
+- [ ] Security review completed
+- [ ] Load testing performed
+
+---
+
+## 📊 Monitoring & Logs
+
+### Log Files
+
+| Log | Location | Purpose |
+|-----|----------|---------|
+| Bot Activity | `state/sql_bot_v2.log` | All bot operations |
+| FastAPI | `logs/api.log` | API requests/responses |
+| Worker | `logs/worker.log` | Background queue processing |
+
+### Log Rotation
+
+Logs are automatically rotated:
+- Max size: 10 MB
+- Backup count: 5 files
+- Format: `sql_bot_v2.log.1`, `sql_bot_v2.log.2`, etc.
+
+### Monitoring Queries
+
+Check bot health:
+```powershell
+# Last 20 log entries
+Get-Content state\sql_bot_v2.log -Tail 20
+
+# Check for errors
+Get-Content state\sql_bot_v2.log | Select-String "ERROR"
+
+# Monitor in real-time
+Get-Content state\sql_bot_v2.log -Wait -Tail 10
+```
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these guidelines:
+
+### Development Setup
+
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Make changes
+4. Run tests: `.\comprehensive-security-test.ps1`
+5. Commit changes: `git commit -m "Add amazing feature"`
+6. Push to branch: `git push origin feature/amazing-feature`
+7. Open Pull Request
+
+### Code Standards
+
+- **Python**: Follow PEP 8
+- **PowerShell**: Use approved verbs (`Get-`, `Set-`, etc.)
+- **Documentation**: Update README for all new features
+- **Testing**: Add tests for security-critical changes
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- **Microsoft Graph API** for Teams integration
+- **FastAPI** for high-performance API framework
+- **Claude CLI** for advanced query generation
+- **Anthropic** for Claude AI capabilities
+
+---
+
+## 📞 Support
+
+For issues, questions, or contributions:
+
+- **GitHub Issues:** https://github.com/GalSened/text-to-sql-teams-bot/issues
+- **Documentation:** This README
+- **Security Reports:** Please report security vulnerabilities privately
+
+---
+
+## 📈 Project Status
+
+- **Version:** 2.0 (Production Ready)
+- **Last Updated:** 2025-10-27
+- **Status:** ✅ Active Development
+- **Stability:** 🟢 Stable
+
+### Recent Updates
+
+- **2025-10-27:** Bilingual security messages implemented
+- **2025-10-27:** Double-layer read-only security active
+- **2025-10-27:** Pattern matching with Claude CLI fallback
+- **2025-10-27:** PowerShell bot v2 deployed
+- **2025-10-27:** Comprehensive testing suite added
+
+---
+
+**Built with ❤️ for secure, bilingual SQL querying in Microsoft Teams**

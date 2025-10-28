@@ -59,3 +59,12 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
+
+# Runtime State Files
+state/
+.chat-id.txt
+.last-message-id.txt
+.msgraph-auth-with-refresh.json
+
+# Bot Tracking Files
+sql_bot_messages.json

@@ -30,27 +30,35 @@ class UnifiedAIClient:
     def __init__(self):
         """Initialize AI client with available providers."""
         self.providers = {}
-        self.primary_provider = getattr(settings, 'primary_ai_provider', 'claude')
+        self.primary_provider = getattr(settings, 'primary_ai_provider', 'claude_cli')
         self.fallback_provider = getattr(settings, 'fallback_ai_provider', 'openai')
 
-        # Initialize OpenAI if available
+        # Initialize Claude CLI (local - no API key needed!)
+        try:
+            from app.core.claude_cli_client import ClaudeCLIClient
+            self.providers['claude_cli'] = ClaudeCLIClient()
+            logger.info("✓ Claude CLI provider initialized (local, no API key needed)")
+        except Exception as e:
+            logger.warning(f"Claude CLI provider not available: {e}")
+
+        # Initialize OpenAI if available (fallback)
         try:
             from app.core.openai_client import OpenAIClient
             self.providers['openai'] = OpenAIClient()
-            logger.info("✓ OpenAI provider initialized")
+            logger.info("✓ OpenAI provider initialized (fallback)")
         except Exception as e:
             logger.warning(f"OpenAI provider not available: {e}")
 
-        # Initialize Claude if available
+        # Initialize Claude API if available (fallback)
         try:
             from app.core.claude_client import ClaudeClient
             self.providers['claude'] = ClaudeClient()
-            logger.info("✓ Claude provider initialized")
+            logger.info("✓ Claude API provider initialized (fallback)")
         except Exception as e:
-            logger.warning(f"Claude provider not available: {e}")
+            logger.warning(f"Claude API provider not available: {e}")
 
         if not self.providers:
-            raise ValueError("No AI providers configured! Set OPENAI_API_KEY or ANTHROPIC_API_KEY")
+            raise ValueError("No AI providers configured!")
 
         logger.info(f"Available providers: {list(self.providers.keys())}")
         logger.info(f"Primary: {self.primary_provider}, Fallback: {self.fallback_provider}")
